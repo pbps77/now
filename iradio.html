@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>K-Radio Web Player (Stop button in channel grid)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans KR, sans-serif; background:#f7f7f8; color:#111; }
+    .container { max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    .card { background:#fff; border-radius:16px; padding:16px; box-shadow:0 6px 18px rgba(0,0,0,.06); }
+    h1 { font-size:22px; margin:0 0 6px; }
+    .muted { color:#6b7280; font-size:13px; margin: 0 0 16px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    @media (min-width:640px){ .grid{ grid-template-columns:repeat(3,1fr);} }
+    @media (min-width:860px){ .grid{ grid-template-columns:repeat(6,1fr);} }
+    button{ border:0; border-radius:12px; padding:10px 12px; font-weight:600; background:#4e4e4e; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.06); cursor:pointer; }
+    button:hover{ background:#373737; }
+    button.active{ background:#111; color:#fff; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row > input[type="text"]{ flex:1; border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; box-shadow:0 2px 6px rgba(0,0,0,.03); background:#fff; }
+    .now{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .now .meta{ min-width:0; }
+    .now .title{ font-weight:700; }
+    .now .url{ font-size:12px; color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:62vw; }
+    audio{ width:100%; }
+    .tip{ margin-top:10px; font-size:13px; color:#6b7280; }
+    .error{ color:#b91c1c; font-weight:600; margin-top:8px; }
+    .switch{ display:inline-flex; align-items:center; gap:6px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header style="margin-bottom:16px">
+      <h1>Radio Web Player</h1>
+      <p class="muted">HLS(m3u8) & MP3/AAC · 프리셋 전환 · 사용자 URL </p>
+    </header>
+
+    <div class="grid" id="presetGrid"></div>
+
+    <div class="row" style="margin:14px 0 20px">
+      <input id="customUrl" type="text" placeholder="직접 URL (예: https://.../playlist.m3u8 또는 http://.../stream.mp3)" />
+      <button id="playCustom">재생</button>
+    </div>
+
+    <div class="card">
+      <div class="now">
+        <div class="meta">
+          <div class="muted">Now Playing</div>
+          <div class="title" id="nowTitle">-</div>
+          <div class="url" id="nowUrl">-</div>
+        </div>
+        <label class="switch">
+          <input id="autoplay" type="checkbox" checked />
+          자동재생
+        </label>
+      </div>
+
+      <audio id="player" controls></audio>
+
+      <div class="tip" id="status">HLS는 브라우저가 지원하면 네이티브로, 아니면 hls.js로 재생합니다.</div>
+      <div class="error" id="error" style="display:none"></div>
+    </div>
+
+    <p class="tip" style="margin-top:12px">
+      ⚠️ 일부 스트림은 토큰/지역 제한, CORS 정책이 있을 수 있습니다.
+    </p>
+  </div>
+
+<script>
+  const PRESETS = [
+    { id: "kbs-1fm", name: "KBS 1FM-classic", api: "https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/24", resolveFrom: "kbs" },
+	{ id: "kbs-2fm", name: "KBS 2FM        ", api: "https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/25", resolveFrom: "kbs" },
+	{ id: "mbc-a_music", name: "MBC A Music ", api: "https://sminiplay.imbc.com/aacplay.ashx?agent=webapp&channel=chm", resolveFrom: "mbc" },
+    { id: "cbs-M", name: "CBS Music", url: "https://m-aac.cbs.co.kr/mweb_cbs939/_definst_/cbs939.stream/chunklist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "cbs-standard", name: "CBS 표준FM", url: "https://m-aac.cbs.co.kr/mweb_cbs981/_definst_/cbs981.stream/chunklist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "tbs-fm", name: "TBS FM", url: "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_fm_web_360.smil/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "tbs-efm", name: "TBS eFM", url: "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_efm_web_360.smil/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "ebs-fm", name: "EBS FM", url: "https://ebsonair.ebs.co.kr/fmradiofamilypc/familypc1m/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "gugak", name: "국악방송", url: "https://mgugaklive.nowcdn.co.kr/gugakradio/gugakradio.stream/playlist.m3u8", type: "application/vnd.apple.mpegurl" }
+  ];
+
+  const state = { current: null, hls: null };
+
+  const el = {
+    grid: document.getElementById("presetGrid"),
+    title: document.getElementById("nowTitle"),
+    url: document.getElementById("nowUrl"),
+    audio: document.getElementById("player"),
+    status: document.getElementById("status"),
+    error: document.getElementById("error"),
+    autoplay: document.getElementById("autoplay"),
+    customUrl: document.getElementById("customUrl"),
+    playCustom: document.getElementById("playCustom")
+  };
+
+  function isHlsUrl(u=""){ return /.m3u8(\?|$)/i.test(u); }
+  function setError(msg){ el.error.textContent = msg || ""; el.error.style.display = msg ? "block" : "none"; }
+  function setNow(meta, resolvedUrl){
+    el.title.textContent = meta?.name || "-";
+    el.url.textContent = resolvedUrl || meta?.url || meta?.api || "-";
+    [...el.grid.querySelectorAll("button[data-id]")].forEach(b=>{
+      if(b.dataset.id===meta?.id) b.classList.add("active"); else b.classList.remove("active");
+    });
+  }
+  function cleanupHls(){ if(state.hls){ try{ state.hls.destroy(); }catch(e){} state.hls=null; } }
+  function safePlay(){
+    el.audio.play().catch(()=>{
+      el.audio.muted = true;
+      el.audio.play().catch(()=> setError("자동재생이 차단되었습니다. 재생 버튼을 눌러주세요."));
+    });
+  }
+
+  async function resolveKbsStream(apiUrl){
+    const res = await fetch(apiUrl, { credentials: "omit" });
+    if(!res.ok) throw new Error("KBS API 응답 오류: "+res.status);
+    const data = await res.json();
+    const url = data.channel_item?.[0]?.service_url;
+    if(!url) throw new Error("KBS API에서 service_url을 찾을 수 없습니다.");
+    return url;
+  }
+
+  async function resolveMbcStream(apiUrl){
+    try {
+      // 방법 1: 기본 fetch 시도
+      const res = await fetch(apiUrl, { 
+        credentials: "omit",
+        headers: { 
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "*/*"
+        }
+      });
+      
+      if(!res.ok) throw new Error("MBC API 응답 오류: "+res.status);
+      const body = await res.text();
+      const url = body.trim();
+      if(!url) throw new Error("MBC API에서 service_url을 찾을 수 없습니다.");
+      return url;
+    } catch(corsError) {
+      // CORS 에러 발생 시 프록시 서버로 폴백
+      console.warn("CORS 에러로 인해 프록시 서버를 사용합니다:", corsError.message);
+
+
+
+
+      //const proxyUrl = "https://radio.bsod.kr/stream/static?stn=mbc&ch=chm";
+
+  const PROXY = "https://cors-proxy-sek8.onrender.com/proxy?url=";
+  const API = "https://sminiplay.imbc.com/aacplay.ashx?agent=webapp&channel=chm";
+  const proxyUrl = PROXY + encodeURIComponent(API);
+
+
+      const proxyRes = await fetch(proxyUrl, { credentials: "omit" });
+      if(!proxyRes.ok) throw new Error("프록시 서버 응답 오류: "+proxyRes.status);
+      
+      const proxyBody = await proxyRes.text();
+      const proxyUrlResult = proxyBody.trim();
+const idx = proxyUrlResult.indexOf("https");
+const result = idx !== -1 ? proxyUrlResult.substring(idx) : "";  // https 이후만 추출
+
+
+      if(!result) throw new Error("프록시 서버에서 스트림 URL을 찾을 수 없습니다.");
+      return result;
+    }
+  }
+  
+  async function playSource(meta){
+    if(!meta) return;
+    cleanupHls();
+    setError(""); setNow(meta);
+    let url = meta.url;
+
+    if(!url && meta.api){
+      try{
+        if(meta.resolveFrom==="kbs") {url = await resolveKbsStream(meta.api); }
+        else if(meta.resolveFrom==="mbc") {url = await resolveMbcStream(meta.api); }
+        else throw new Error("알 수 없는 API 리졸버 유형입니다.");
+      }catch(e){ setError(e.message || "API로부터 스트림 URL을 가져오지 못했습니다."); return; }
+    }
+
+    setNow(meta, url);
+    const shouldAutoPlay = el.autoplay.checked;
+
+    if(isHlsUrl(url)){
+      if(el.audio.canPlayType("application/vnd.apple.mpegurl")){
+        el.audio.src = url;
+        if(shouldAutoPlay) safePlay();
+      }else if(Hls.isSupported()){
+        state.hasAutoStarted = false;
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        state.hls = hls;
+        hls.loadSource(url);
+        hls.attachMedia(el.audio);
+        hls.on(Hls.Events.ERROR, (_evt, data)=>{ if(data?.fatal) setError("HLS fatal: "+data.type+" / "+(data.details||"")); });
+        if(shouldAutoPlay){
+          hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+            if(!state.hasAutoStarted && !state.userPaused){
+              state.hasAutoStarted = true;
+              safePlay();
+            }
+          });
+        }
+      }else{
+        setError("이 브라우저는 HLS를 재생할 수 없습니다. 다른 브라우저 또는 Safari를 사용해 보세요.");
+        el.audio.removeAttribute("src");
+      }
+    }else{
+      el.audio.src = url;
+      if(shouldAutoPlay) safePlay();
+    }
+    state.current = meta;
+  }
+
+  function stopPlayback(){
+    const audio = el.audio;
+    audio.pause();
+    if(state.hls){
+      try{ if(typeof state.hls.stopLoad==='function') state.hls.stopLoad(); state.hls.destroy(); }catch(e){}
+      state.hls=null;
+    }
+    audio.removeAttribute("src");
+    audio.load();
+    // reset active color
+    [...el.grid.querySelectorAll("button[data-id]")].forEach(b=> b.classList.remove("active"));
+    el.title.textContent = "-";
+    el.url.textContent = "-";
+    state.current = null;
+  }
+
+  function initUI(){
+    PRESETS.forEach(p=>{
+      const b=document.createElement("button");
+      b.textContent=p.name; b.title=p.note||""; b.dataset.id=p.id;
+      b.addEventListener("click", ()=> playSource(p));
+      el.grid.appendChild(b);
+    });
+
+    // stop button at the very end, same style/size
+    const stopBtn = document.createElement("button");
+    stopBtn.textContent = "정지";
+    stopBtn.addEventListener("click", stopPlayback);
+    el.grid.appendChild(stopBtn);
+
+    el.playCustom.addEventListener("click", ()=>{
+      const u=(el.customUrl.value||"").trim();
+      if(!u) return;
+      playSource({ id:"custom", name:"Custom", url:u });
+    });
+
+    playSource(PRESETS[0]);
+  }
+
+  window.addEventListener("DOMContentLoaded", initUI);
+</script>
+</body>
+</html>
