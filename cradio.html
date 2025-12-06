@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>시계 라디오</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;700&family=Roboto+Mono:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: '7Segment';
+      src: url('https://github.com/TheDudeThatCode/7-Segment/raw/master/7Segment.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    :root {
+      --bg: #000000;
+      --card: #0b1220;
+      --accent: #60a5fa;
+      --text: #e6eef8;
+      color-scheme: light dark;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+    }
+    
+    body {
+      background: #000000;
+      color: var(--text);
+      padding: 16px;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    /* Clock Styles - Digital LED Display */
+    .clock-section {
+      background: #1a1a1a;
+      border: 3px solid #333;
+      padding: 32px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 24px;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8), 0 8px 16px rgba(0, 0, 0, 0.5);
+      font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+    }
+    
+    .clock-section .date {
+      font-size: 1.3rem;
+      color: #00ff00;
+      margin-bottom: 0;
+      letter-spacing: 0px;
+      text-shadow: 0 0 10px #00ff00, 0 0 20px rgba(0, 255, 0, 0.5);
+      font-weight: 700;
+    }
+    
+    .clock-section .time {
+      font-size: 5rem;
+      font-weight: 700;
+      margin: 12px 0;
+      color: #00ff00;
+      letter-spacing: 2px;
+      text-shadow: 0 0 15px #00ff00, 0 0 30px rgba(0, 255, 0, 0.6);
+      font-family: 'Courier Prime', 'IBM Plex Mono', 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+    
+    .clock-section .weekday {
+      font-size: 1.3rem;
+      color: #00ff00;
+      letter-spacing: 0px;
+      text-shadow: 0 0 8px #00ff00, 0 0 16px rgba(0, 255, 0, 0.4);
+      font-weight: 700;
+      margin-bottom: 0;
+    }
+    
+    /* Radio Styles */
+    .radio-section {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 20px;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+    }
+    
+    .radio-section h2 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 1.4rem;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    
+    @media (min-width: 640px) {
+      .grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+    
+    @media (min-width: 860px) {
+      .grid {
+        grid-template-columns: repeat(5, 1fr);
+      }
+    }
+    
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    
+    button:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    button.active {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+    
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 14px 0 20px;
+    }
+    
+    .row > input[type="text"] {
+      flex: 1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+    
+    .row > input[type="text"]::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .now {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .now .meta {
+      min-width: 0;
+      flex: 1;
+    }
+    
+    .now .title {
+      font-weight: 700;
+      color: #00ff00;
+      font-size: 1.1rem;
+      text-shadow: 0 0 10px #00ff00, 0 0 20px rgba(0, 255, 0, 0.5);
+      letter-spacing: 0px;
+    }
+    
+    .now .url {
+      font-size: 12px;
+      color: #00ff00;
+      opacity: 0.7;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+      text-shadow: 0 0 5px #00ff00;
+    }
+    
+    audio {
+      width: 100%;
+      margin: 12px 0;
+      max-width: 300px;
+      margin-left: 0;
+      margin-right: auto;
+      display: block;
+    }
+    
+    audio::-webkit-media-controls-volume-slider-container {
+      display: none !important;
+    }
+    
+    /* Volume Dial Styles */
+    .volume-dial-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    
+    .volume-dial {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #2a2a2a, #1a1a1a);
+      border: 3px solid #333;
+      position: relative;
+      cursor: pointer;
+      box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8), 0 4px 8px rgba(0, 0, 0, 0.5);
+    }
+    
+    .volume-dial::before {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      width: 4px;
+      height: 35px;
+      background: var(--accent);
+      transform-origin: bottom center;
+      transform: translateX(-50%) rotate(var(--dial-rotation, -135deg));
+      border-radius: 2px;
+      box-shadow: 0 0 8px var(--accent);
+      transition: transform 0.1s ease;
+    }
+    
+    .volume-dial::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      background: #444;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid #555;
+    }
+    
+    .volume-level {
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    
+    .tip {
+      margin-top: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .error {
+      color: #ff6b6b;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+    
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+    
+    .muted {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+    }
+    
+    @media (max-width: 420px) {
+      .clock-section .time {
+        font-size: 3rem;
+      }
+      .clock-section .date {
+        font-size: 1.1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Clock Section -->
+    <section class="clock-section" role="status" aria-live="polite">
+      <div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 8px;">
+        <div class="date" id="date"></div>
+        <div class="weekday" id="weekday"></div>
+      </div>
+      <div class="time" id="time"></div>
+      
+      <!-- Now Playing Info -->
+      <div class="now" style="margin-top: 24px;">
+        <div class="meta">
+          <div class="title" id="nowTitle">-</div>
+          <div class="url" id="nowUrl">-</div>
+        </div>
+        <label class="switch">
+          <input type="hidden" id="autoplay" type="checkbox" checked />
+          
+        </label>
+      </div>
+    </section>
+
+    <!-- Radio Section -->
+    <section class="radio-section">
+      
+      <div class="grid" id="presetGrid"></div>
+
+      <div class="row">
+        <input id="customUrl" type="text" placeholder="직접 URL (예: https://.../playlist.m3u8 또는 http://.../stream.mp3)" />
+        <button id="playCustom">재생</button>
+      </div>
+
+      <div style="display: flex; gap: 20px; align-items: center; margin-top: 16px;">
+        <!-- Audio Player -->
+        <audio id="player" style="width: 400px; display: block;" controls></audio>
+        
+        <div class="volume-dial-container" style="margin-top: 0;">
+          <div style="display: flex; gap: 20px; align-items: center;">
+            <div class="volume-dial" id="volumeDial"></div>
+            <button id="stopBtn" style="width: 80px; height: 80px; font-size: 14px; border-radius: 8px;">정지</button>
+          </div>
+          <div class="volume-level" id="volumeLevel">30</div>
+        </div>
+
+      </div>
+
+      <p class="tip" style="margin-top:12px">
+        
+        <div class="error" id="error" style="display:none"></div>
+      </p>
+      <p class="tip" style="margin-top:12px">
+        
+        HLS는 브라우저가 지원하면 네이티브로, 아니면 hls.js로 재생합니다.
+      </p>
+      <p class="tip" style="margin-top:12px">
+        ⚠️ 일부 스트림은 토큰/지역 제한, CORS 정책이 있을 수 있습니다.
+      </p>
+      
+    </section>
+  </div>
+
+<script>
+  // ========== Clock Logic ==========
+  (function(){
+    const $date = document.getElementById('date');
+    const $time = document.getElementById('time');
+    const $weekday = document.getElementById('weekday');
+
+    const two = v => v.toString().padStart(2,'0');
+    const weekdayNames = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+
+    function updateClock(){
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      const h = two(now.getHours());
+      const m = two(now.getMinutes());
+      const s = two(now.getSeconds());
+      const wk = weekdayNames[now.getDay()];
+
+      $date.textContent = `${year}년 ${month}월 ${two(day)}일`;
+      $time.textContent = `${h}:${m}:${s}`;
+      $weekday.textContent = wk;
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+  })();
+
+  // ========== Radio Logic ==========
+  const PRESETS = [
+    { id: "kbs-1fm", name: "KBS 1FM-classic", api: "https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/24", resolveFrom: "kbs" },
+    { id: "kbs-2fm", name: "KBS 2FM", api: "https://cfpwwwapi.kbs.co.kr/api/v1/landing/live/channel_code/25", resolveFrom: "kbs" },
+    { id: "mbc-a_music", name: "MBC A Music", api: "https://sminiplay.imbc.com/aacplay.ashx?agent=webapp&channel=chm", resolveFrom: "mbc" },
+    { id: "cbs-M", name: "CBS Music", url: "https://m-aac.cbs.co.kr/mweb_cbs939/_definst_/cbs939.stream/chunklist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "cbs-standard", name: "CBS 표준FM", url: "https://m-aac.cbs.co.kr/mweb_cbs981/_definst_/cbs981.stream/chunklist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "tbs-fm", name: "TBS FM", url: "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_fm_web_360.smil/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "tbs-efm", name: "TBS eFM", url: "https://cdnfm.tbs.seoul.kr/tbs/_definst_/tbs_efm_web_360.smil/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "ebs-fm", name: "EBS FM", url: "https://ebsonair.ebs.co.kr/fmradiofamilypc/familypc1m/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "gugak", name: "국악방송", url: "https://mgugaklive.nowcdn.co.kr/gugakradio/gugakradio.stream/playlist.m3u8", type: "application/vnd.apple.mpegurl" },
+    { id: "afkn-daegu", name: "AFKN Daegu", url: "https://13743.live.streamtheworld.com/AFNP_DGUAAC.aac", type: "audio/aac" },
+    { id: "afkn-tokyo", name: "AFN Tokyo", url: "https://25603.live.streamtheworld.com/AFNP_TKOAAC.aac", type: "audio/aac" },
+    { id: "afn-01-pop", name: "#1 Pop", url: "https://19273.live.streamtheworld.com/AFN01_S01AAC.aac", type: "audio/aac" },
+    { id: "afn-jazz", name: "Jazz", url: "https://19273.live.streamtheworld.com/AFN05_S01AAC.aac", type: "audio/aac" },
+    { id: "afn-rnb", name: "AFN The Groove", url: "https://17843.live.streamtheworld.com/AFN03_S01AAC.aac", type: "audio/aac" },
+    { id: "afkn-okinawa", name: "AFN GO Gravity", url: "https://18243.live.streamtheworld.com/AFN_GRVAAC.aac", type: "audio/aac" }
+  ];
+
+  const state = { current: null, hls: null };
+
+  const el = {
+    grid: document.getElementById("presetGrid"),
+    title: document.getElementById("nowTitle"),
+    url: document.getElementById("nowUrl"),
+    audio: document.getElementById("player"),
+    status: document.getElementById("status"),
+    error: document.getElementById("error"),
+    autoplay: document.getElementById("autoplay"),
+    customUrl: document.getElementById("customUrl"),
+    playCustom: document.getElementById("playCustom"),
+    volumeDial: document.getElementById("volumeDial"),
+    volumeLevel: document.getElementById("volumeLevel")
+  };
+
+  function isHlsUrl(u=""){ return /.m3u8(\?|$)/i.test(u); }
+  function setError(msg){ el.error.textContent = msg || ""; el.error.style.display = msg ? "block" : "none"; }
+  function setNow(meta, resolvedUrl){
+    el.title.textContent = meta?.name || "-";
+    el.url.textContent = resolvedUrl || meta?.url || meta?.api || "-";
+    [...el.grid.querySelectorAll("button[data-id]")].forEach(b=>{
+      if(b.dataset.id===meta?.id) b.classList.add("active"); else b.classList.remove("active");
+    });
+  }
+  function cleanupHls(){ if(state.hls){ try{ state.hls.destroy(); }catch(e){} state.hls=null; } }
+  function safePlay(){
+    el.audio.play().catch(()=>{
+      el.audio.muted = true;
+      el.audio.play().catch(()=> setError("자동재생이 차단되었습니다. 재생 버튼을 눌러주세요."));
+    });
+  }
+
+  async function resolveKbsStream(apiUrl){
+    const res = await fetch(apiUrl, { credentials: "omit" });
+    if(!res.ok) throw new Error("KBS API 응답 오류: "+res.status);
+    const data = await res.json();
+    const url = data.channel_item?.[0]?.service_url;
+    if(!url) throw new Error("KBS API에서 service_url을 찾을 수 없습니다.");
+    return url;
+  }
+
+  async function resolveMbcStream(apiUrl){
+    try {
+      const res = await fetch(apiUrl, { 
+        credentials: "omit",
+        headers: { 
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "*/*"
+        }
+      });
+      
+      if(!res.ok) throw new Error("MBC API 응답 오류: "+res.status);
+      const body = await res.text();
+      const url = body.trim();
+      if(!url) throw new Error("MBC API에서 service_url을 찾을 수 없습니다.");
+      return url;
+    } catch(corsError) {
+      console.warn("CORS 에러로 인해 프록시 서버를 사용합니다:", corsError.message);
+      const PROXY = "https://cors-proxy-sek8.onrender.com/proxy?url=";
+      const API = "https://sminiplay.imbc.com/aacplay.ashx?agent=webapp&channel=chm";
+      const proxyUrl = PROXY + encodeURIComponent(API);
+
+      const proxyRes = await fetch(proxyUrl, { credentials: "omit" });
+      if(!proxyRes.ok) throw new Error("프록시 서버 응답 오류: "+proxyRes.status);
+      
+      const proxyBody = await proxyRes.text();
+      const proxyUrlResult = proxyBody.trim();
+      const idx = proxyUrlResult.indexOf("https");
+      const result = idx !== -1 ? proxyUrlResult.substring(idx) : "";
+
+      if(!result) throw new Error("프록시 서버에서 스트림 URL을 찾을 수 없습니다.");
+      return result;
+    }
+  }
+  
+  async function playSource(meta){
+    if(!meta) return;
+    cleanupHls();
+    setError(""); setNow(meta);
+    let url = meta.url;
+
+    if(!url && meta.api){
+      try{
+        if(meta.resolveFrom==="kbs") {url = await resolveKbsStream(meta.api); }
+        else if(meta.resolveFrom==="mbc") {url = await resolveMbcStream(meta.api); }
+        else throw new Error("알 수 없는 API 리졸버 유형입니다.");
+      }catch(e){ setError(e.message || "API로부터 스트림 URL을 가져오지 못했습니다."); return; }
+    }
+
+    setNow(meta, url);
+    
+    const shouldAutoPlay = el.autoplay.checked;
+
+    if(isHlsUrl(url)){
+      if(el.audio.canPlayType("application/vnd.apple.mpegurl")){
+        el.audio.src = url;
+        if(shouldAutoPlay) safePlay();
+      }else if(Hls.isSupported()){
+        state.hasAutoStarted = false;
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        state.hls = hls;
+        hls.loadSource(url);
+        hls.attachMedia(el.audio);
+        hls.on(Hls.Events.ERROR, (_evt, data)=>{ if(data?.fatal) setError("HLS fatal: "+data.type+" / "+(data.details||"")); });
+        if(shouldAutoPlay){
+          hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+            if(!state.hasAutoStarted && !state.userPaused){
+              state.hasAutoStarted = true;
+              safePlay();
+            }
+          });
+        }
+      }else{
+        setError("이 브라우저는 HLS를 재생할 수 없습니다. 다른 브라우저 또는 Safari를 사용해 보세요.");
+        el.audio.removeAttribute("src");
+      }
+    }else{
+      el.audio.src = url;
+      if(shouldAutoPlay) safePlay();
+    }
+    state.current = meta;
+  }
+
+  function stopPlayback(){
+    const audio = el.audio;
+    audio.pause();
+    if(state.hls){
+      try{ if(typeof state.hls.stopLoad==='function') state.hls.stopLoad(); state.hls.destroy(); }catch(e){}
+      state.hls=null;
+    }
+    audio.removeAttribute("src");
+    audio.load();
+    [...el.grid.querySelectorAll("button[data-id]")].forEach(b=> b.classList.remove("active"));
+    el.title.textContent = "-";
+    el.url.textContent = "-";
+    state.current = null;
+  }
+
+  function initUI(){
+    PRESETS.forEach(p=>{
+      const b=document.createElement("button");
+      b.textContent=p.name; b.title=p.note||""; b.dataset.id=p.id;
+      b.addEventListener("click", ()=> playSource(p));
+      el.grid.appendChild(b);
+    });
+
+    // 정지 버튼 이벤트
+    document.getElementById("stopBtn").addEventListener("click", stopPlayback);
+
+    el.playCustom.addEventListener("click", ()=>{
+      const u=(el.customUrl.value||"").trim();
+      if(!u) return;
+      playSource({ id:"custom", name:"Custom", url:u });
+    });
+
+    // 초기 볼륨 설정 (스피커 ON 상태)
+    el.audio.volume = 0.5;
+    updateVolumeDial(50);
+
+    // 볼륨 다이얼 컨트롤
+    let isDragging = false;
+    
+    function updateVolumeDial(volume) {
+      const rotation = -135 + (volume / 100) * 270; // -135deg to 135deg
+      el.volumeDial.style.setProperty('--dial-rotation', rotation + 'deg');
+      el.volumeLevel.textContent = volume;
+      el.audio.volume = volume / 100;
+    }
+    
+    function getVolumeFromAngle(x, y, rect) {
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI);
+      angle = angle + 90; // Adjust for top position
+      if (angle < -135) angle += 360;
+      if (angle > 135) angle = 135;
+      if (angle < -135) angle = -135;
+      const volume = Math.round(((angle + 135) / 270) * 100);
+      return Math.max(0, Math.min(100, volume));
+    }
+    
+    el.volumeDial.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      const rect = el.volumeDial.getBoundingClientRect();
+      const volume = getVolumeFromAngle(e.clientX, e.clientY, rect);
+      updateVolumeDial(volume);
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const rect = el.volumeDial.getBoundingClientRect();
+      const volume = getVolumeFromAngle(e.clientX, e.clientY, rect);
+      updateVolumeDial(volume);
+    });
+    
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+    
+    // Touch support
+    el.volumeDial.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      const rect = el.volumeDial.getBoundingClientRect();
+      const touch = e.touches[0];
+      const volume = getVolumeFromAngle(touch.clientX, touch.clientY, rect);
+      updateVolumeDial(volume);
+      e.preventDefault();
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const rect = el.volumeDial.getBoundingClientRect();
+      const touch = e.touches[0];
+      const volume = getVolumeFromAngle(touch.clientX, touch.clientY, rect);
+      updateVolumeDial(volume);
+    });
+    
+    document.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+
+    // 초기 로딩 시 자동 선택 해제
+    // playSource(PRESETS[0]);
+    
+    // 사용자 상호작용 후 자동재생 활성화 (브라우저 정책)
+    document.addEventListener('click', function enableAutoplay() {
+      if(el.autoplay.checked && el.audio.paused){
+        el.audio.muted = false;
+        el.audio.play().catch(()=>{});
+      }
+      document.removeEventListener('click', enableAutoplay);
+    }, { once: true });
+  }
+
+  window.addEventListener("DOMContentLoaded", initUI);
+</script>
+</body>
+</html>
